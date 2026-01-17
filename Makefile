@@ -22,13 +22,13 @@ test:
 uplocal:
 	docker-compose -f ./docker-compose.local.yml up -d 
 
+downlocal:
+	docker-compose -f ./docker-compose.local.yml down 
+	
 upprod:
 	docker-compose up -d 
 
-dlocal:
-	docker-compose -f ./docker-compose.local.yml down 
-
-dprod:
+downprod:
 	docker-compose down
 
 .PHONY: migrateup migratedown new_migration sqlc server test local prod
