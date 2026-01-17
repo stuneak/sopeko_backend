@@ -69,7 +69,28 @@ type CommentsChildren []struct {
 		CreatedUTC float64     `json:"created_utc"`
 		ParentID   string      `json:"parent_id"`
 		Replies    interface{} `json:"replies"`
+		// For "more" objects
+		Children []string `json:"children"`
+		Count    int      `json:"count"`
 	} `json:"data"`
+}
+
+type MoreChildrenResponse struct {
+	JSON struct {
+		Data struct {
+			Things []struct {
+				Kind string `json:"kind"`
+				Data struct {
+					ID         string      `json:"id"`
+					Author     string      `json:"author"`
+					Body       string      `json:"body"`
+					CreatedUTC float64     `json:"created_utc"`
+					ParentID   string      `json:"parent_id"`
+					Replies    interface{} `json:"replies"`
+				} `json:"data"`
+			} `json:"things"`
+		} `json:"data"`
+	} `json:"json"`
 }
 
 type RedditCommentResponse []struct {
@@ -114,6 +135,71 @@ func (r *RedditScraper) makeRequest(ctx context.Context, url string) ([]byte, er
 	}
 
 	return body, nil
+}
+
+// fetchMoreChildren fetches additional comments using the /api/morechildren endpoint
+func (r *RedditScraper) fetchMoreChildren(ctx context.Context, linkID string, childrenIDs []string) ([]RedditComment, error) {
+	if len(childrenIDs) == 0 {
+		return nil, nil
+	}
+
+	var allComments []RedditComment
+
+	// Reddit limits to ~100 IDs per request
+	batchSize := 100
+	for i := 0; i < len(childrenIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(childrenIDs) {
+			end = len(childrenIDs)
+		}
+		batch := childrenIDs[i:end]
+
+		// Build comma-separated list of IDs
+		var ids string
+		for j, id := range batch {
+			if j > 0 {
+				ids += ","
+			}
+			ids += id
+		}
+
+		url := fmt.Sprintf("%s/api/morechildren.json?api_type=json&link_id=t3_%s&children=%s",
+			redditBaseURL, linkID, ids)
+
+		body, err := r.makeRequest(ctx, url)
+		if err != nil {
+			log.Printf("[REDDIT] Warning: failed to fetch more children: %v", err)
+			continue
+		}
+
+		var response MoreChildrenResponse
+		if err := json.Unmarshal(body, &response); err != nil {
+			log.Printf("[REDDIT] Warning: failed to parse morechildren response: %v", err)
+			continue
+		}
+
+		for _, thing := range response.JSON.Data.Things {
+			if thing.Kind != "t1" {
+				continue
+			}
+			comment := RedditComment{
+				ID:        thing.Data.ID,
+				Author:    thing.Data.Author,
+				Body:      thing.Data.Body,
+				CreatedAt: time.Unix(int64(thing.Data.CreatedUTC), 0),
+				PostID:    linkID,
+				ParentID:  thing.Data.ParentID,
+			}
+			allComments = append(allComments, comment)
+		}
+
+		// Rate limiting between batches
+		if end < len(childrenIDs) {
+			time.Sleep(5 * time.Second)
+		}
+	}
+
+	return allComments, nil
 }
 
 // FetchSubredditPosts fetches all posts from a subreddit within the last 24 hours
@@ -175,7 +261,7 @@ func (r *RedditScraper) FetchSubredditPosts(ctx context.Context, subreddit strin
 
 // FetchPostComments fetches all comments for a specific post, including nested replies
 func (r *RedditScraper) FetchPostComments(ctx context.Context, subreddit, postID string) ([]RedditComment, error) {
-	url := fmt.Sprintf("%s/r/%s/comments/%s.json?limit=2000&depth=10", redditBaseURL, subreddit, postID)
+	url := fmt.Sprintf("%s/r/%s/comments/%s.json?limit=2000&depth=50", redditBaseURL, subreddit, postID)
 
 	body, err := r.makeRequest(ctx, url)
 	if err != nil {
@@ -188,17 +274,37 @@ func (r *RedditScraper) FetchPostComments(ctx context.Context, subreddit, postID
 	}
 
 	var comments []RedditComment
+	var moreIDs []string
+
 	if len(response) >= 2 {
-		comments = r.parseComments(response[1].Data.Children, postID)
+		comments, moreIDs = r.parseCommentsWithMore(response[1].Data.Children, postID)
+	}
+
+	// Fetch additional comments from "more" objects
+	if len(moreIDs) > 0 {
+		log.Printf("[REDDIT] Post %s: fetching %d additional comment IDs", postID, len(moreIDs))
+		moreComments, err := r.fetchMoreChildren(ctx, postID, moreIDs)
+		if err != nil {
+			log.Printf("[REDDIT] Warning: failed to fetch more children for post %s: %v", postID, err)
+		} else {
+			comments = append(comments, moreComments...)
+		}
 	}
 
 	return comments, nil
 }
 
-func (r *RedditScraper) parseComments(children CommentsChildren, postID string) []RedditComment {
+func (r *RedditScraper) parseCommentsWithMore(children CommentsChildren, postID string) ([]RedditComment, []string) {
 	var comments []RedditComment
+	var moreIDs []string
 
 	for _, child := range children {
+		// Collect "more" object IDs
+		if child.Kind == "more" {
+			moreIDs = append(moreIDs, child.Data.Children...)
+			continue
+		}
+
 		if child.Kind != "t1" {
 			continue
 		}
@@ -212,12 +318,14 @@ func (r *RedditScraper) parseComments(children CommentsChildren, postID string) 
 			ParentID:  child.Data.ParentID,
 		}
 
-		// Parse nested replies
+		// Parse nested replies and collect more IDs from them
 		if child.Data.Replies != nil {
 			if repliesMap, ok := child.Data.Replies.(map[string]interface{}); ok {
 				if data, ok := repliesMap["data"].(map[string]interface{}); ok {
 					if childrenRaw, ok := data["children"].([]interface{}); ok {
-						comment.Replies = r.parseNestedReplies(childrenRaw, postID)
+						nestedReplies, nestedMoreIDs := r.parseNestedRepliesWithMore(childrenRaw, postID)
+						comment.Replies = nestedReplies
+						moreIDs = append(moreIDs, nestedMoreIDs...)
 					}
 				}
 			}
@@ -226,11 +334,12 @@ func (r *RedditScraper) parseComments(children CommentsChildren, postID string) 
 		comments = append(comments, comment)
 	}
 
-	return comments
+	return comments, moreIDs
 }
 
-func (r *RedditScraper) parseNestedReplies(childrenRaw []interface{}, postID string) []RedditComment {
+func (r *RedditScraper) parseNestedRepliesWithMore(childrenRaw []interface{}, postID string) ([]RedditComment, []string) {
 	var replies []RedditComment
+	var moreIDs []string
 
 	for _, childRaw := range childrenRaw {
 		childMap, ok := childRaw.(map[string]interface{})
@@ -239,6 +348,21 @@ func (r *RedditScraper) parseNestedReplies(childrenRaw []interface{}, postID str
 		}
 
 		kind, _ := childMap["kind"].(string)
+
+		// Collect "more" object IDs
+		if kind == "more" {
+			if dataMap, ok := childMap["data"].(map[string]interface{}); ok {
+				if children, ok := dataMap["children"].([]interface{}); ok {
+					for _, id := range children {
+						if idStr, ok := id.(string); ok {
+							moreIDs = append(moreIDs, idStr)
+						}
+					}
+				}
+			}
+			continue
+		}
+
 		if kind != "t1" {
 			continue
 		}
@@ -267,7 +391,9 @@ func (r *RedditScraper) parseNestedReplies(childrenRaw []interface{}, postID str
 		if repliesRaw, ok := dataMap["replies"].(map[string]interface{}); ok {
 			if repliesData, ok := repliesRaw["data"].(map[string]interface{}); ok {
 				if nestedChildren, ok := repliesData["children"].([]interface{}); ok {
-					comment.Replies = r.parseNestedReplies(nestedChildren, postID)
+					nestedReplies, nestedMoreIDs := r.parseNestedRepliesWithMore(nestedChildren, postID)
+					comment.Replies = nestedReplies
+					moreIDs = append(moreIDs, nestedMoreIDs...)
 				}
 			}
 		}
@@ -275,7 +401,7 @@ func (r *RedditScraper) parseNestedReplies(childrenRaw []interface{}, postID str
 		replies = append(replies, comment)
 	}
 
-	return replies
+	return replies, moreIDs
 }
 
 // FlattenComments converts nested comments into a flat slice for easier processing
