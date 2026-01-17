@@ -1,2 +1,3 @@
 # Air hot reload
 tmp/
+.env
