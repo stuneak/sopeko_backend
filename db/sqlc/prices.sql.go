@@ -30,10 +30,35 @@ func (q *Queries) GetLatestTickerPrice(ctx context.Context, tickerID int64) (Get
 	return i, err
 }
 
-const insertTickerPrice = `-- name: InsertTickerPrice :exec
+const getTickerPriceByDate = `-- name: GetTickerPriceByDate :one
+SELECT id, price, recorded_at
+FROM ticker_prices
+WHERE ticker_id = $1 AND DATE(recorded_at) = DATE($2)
+`
+
+type GetTickerPriceByDateParams struct {
+	TickerID int64       `json:"ticker_id"`
+	Date     interface{} `json:"date"`
+}
+
+type GetTickerPriceByDateRow struct {
+	ID         int64     `json:"id"`
+	Price      string    `json:"price"`
+	RecordedAt time.Time `json:"recorded_at"`
+}
+
+func (q *Queries) GetTickerPriceByDate(ctx context.Context, arg GetTickerPriceByDateParams) (GetTickerPriceByDateRow, error) {
+	row := q.db.QueryRowContext(ctx, getTickerPriceByDate, arg.TickerID, arg.Date)
+	var i GetTickerPriceByDateRow
+	err := row.Scan(&i.ID, &i.Price, &i.RecordedAt)
+	return i, err
+}
+
+const insertTickerPrice = `-- name: InsertTickerPrice :one
 INSERT INTO ticker_prices (ticker_id, price, recorded_at)
 VALUES ($1, $2, $3)
-ON CONFLICT (ticker_id, recorded_at) DO NOTHING
+ON CONFLICT (ticker_id, recorded_at) DO UPDATE SET price = EXCLUDED.price
+RETURNING id, ticker_id, price, recorded_at
 `
 
 type InsertTickerPriceParams struct {
@@ -42,7 +67,33 @@ type InsertTickerPriceParams struct {
 	RecordedAt time.Time `json:"recorded_at"`
 }
 
-func (q *Queries) InsertTickerPrice(ctx context.Context, arg InsertTickerPriceParams) error {
-	_, err := q.db.ExecContext(ctx, insertTickerPrice, arg.TickerID, arg.Price, arg.RecordedAt)
-	return err
+func (q *Queries) InsertTickerPrice(ctx context.Context, arg InsertTickerPriceParams) (TickerPrice, error) {
+	row := q.db.QueryRowContext(ctx, insertTickerPrice, arg.TickerID, arg.Price, arg.RecordedAt)
+	var i TickerPrice
+	err := row.Scan(
+		&i.ID,
+		&i.TickerID,
+		&i.Price,
+		&i.RecordedAt,
+	)
+	return i, err
+}
+
+const tickerPriceExistsForDate = `-- name: TickerPriceExistsForDate :one
+SELECT EXISTS(
+  SELECT 1 FROM ticker_prices
+  WHERE ticker_id = $1 AND DATE(recorded_at) = DATE($2)
+) AS exists
+`
+
+type TickerPriceExistsForDateParams struct {
+	TickerID int64       `json:"ticker_id"`
+	Date     interface{} `json:"date"`
+}
+
+func (q *Queries) TickerPriceExistsForDate(ctx context.Context, arg TickerPriceExistsForDateParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, tickerPriceExistsForDate, arg.TickerID, arg.Date)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

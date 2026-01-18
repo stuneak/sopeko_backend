@@ -16,10 +16,13 @@ func NewServer(store *db.Queries, ginMode string) *Server {
 
 	gin.SetMode(ginMode)
 
+	// Health check
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
 	// Routes
-	router.GET("/users/:id", server.getUser)
-	router.POST("/users", server.createUser)
-	router.GET("/users", server.listUsers)
+	router.GET("/mentions/:username", server.getUserMentions)
 
 	server.router = router
 	return server

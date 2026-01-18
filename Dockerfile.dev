@@ -3,13 +3,12 @@ FROM golang:1.25-alpine
 
 WORKDIR /app
 
-# Install git, air, and curl for downloading migrate
+# Install git, air, and migrate CLI
 RUN apk add --no-cache git curl && \
-    go install github.com/air-verse/air@latest
-
-# Install golang-migrate
-RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz && \
-    mv migrate /usr/local/bin/migrate
+    go install github.com/air-verse/air@latest && \
+    curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xz && \
+    mv migrate /usr/local/bin/migrate && \
+    chmod +x /usr/local/bin/migrate
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -17,15 +16,12 @@ COPY go.mod go.sum ./
 # Download dependencies
 RUN go mod download
 
-# Copy entrypoint script
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
+# Copy entrypoint for dev
+COPY entrypoint.dev.sh .
+RUN chmod +x entrypoint.dev.sh
 
 # Source code will be mounted as volume for hot reload
 # No COPY of source code here
 
 EXPOSE 8080
-
-# Run migrations then start air for hot reload
-ENTRYPOINT ["./entrypoint.sh"]
-CMD ["air", "-c", ".air.toml"]
+ENTRYPOINT ["./entrypoint.dev.sh"]

@@ -5,38 +5,38 @@
 package db
 
 import (
-	"database/sql"
 	"time"
 )
 
 type Comment struct {
-	ID         int64          `json:"id"`
-	UserID     int64          `json:"user_id"`
-	Source     string         `json:"source"`
-	ExternalID sql.NullString `json:"external_id"`
-	Content    sql.NullString `json:"content"`
-	CreatedAt  time.Time      `json:"created_at"`
+	ID         int64     `json:"id"`
+	UserID     int64     `json:"user_id"`
+	Source     string    `json:"source"`
+	ExternalID string    `json:"external_id"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type Ticker struct {
-	ID          int64          `json:"id"`
-	Symbol      string         `json:"symbol"`
-	CompanyName sql.NullString `json:"company_name"`
-	Exchange    sql.NullString `json:"exchange"`
-	Currency    string         `json:"currency"`
-	CreatedAt   time.Time      `json:"created_at"`
+	ID          int64     `json:"id"`
+	Symbol      string    `json:"symbol"`
+	CompanyName string    `json:"company_name"`
+	Exchange    string    `json:"exchange"`
+	Currency    string    `json:"currency"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type TickerMention struct {
-	ID             int64         `json:"id"`
-	TickerID       int64         `json:"ticker_id"`
-	UserID         int64         `json:"user_id"`
-	CommentID      sql.NullInt64 `json:"comment_id"`
-	MentionedAt    time.Time     `json:"mentioned_at"`
-	PriceAtMention string        `json:"price_at_mention"`
+	ID          int64     `json:"id"`
+	TickerID    int64     `json:"ticker_id"`
+	UserID      int64     `json:"user_id"`
+	CommentID   int64     `json:"comment_id"`
+	PriceID     int64     `json:"price_id"`
+	MentionedAt time.Time `json:"mentioned_at"`
 }
 
 type TickerPrice struct {
+	ID         int64     `json:"id"`
 	TickerID   int64     `json:"ticker_id"`
 	Price      string    `json:"price"`
 	RecordedAt time.Time `json:"recorded_at"`

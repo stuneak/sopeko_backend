@@ -7,7 +7,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"time"
 )
 
@@ -17,18 +16,18 @@ INSERT INTO ticker_mentions (
   user_id,
   comment_id,
   mentioned_at,
-  price_at_mention
+  price_id
 )
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, ticker_id, user_id, comment_id, mentioned_at, price_at_mention
+RETURNING id, ticker_id, user_id, comment_id, price_id, mentioned_at
 `
 
 type CreateTickerMentionParams struct {
-	TickerID       int64         `json:"ticker_id"`
-	UserID         int64         `json:"user_id"`
-	CommentID      sql.NullInt64 `json:"comment_id"`
-	MentionedAt    time.Time     `json:"mentioned_at"`
-	PriceAtMention string        `json:"price_at_mention"`
+	TickerID    int64     `json:"ticker_id"`
+	UserID      int64     `json:"user_id"`
+	CommentID   int64     `json:"comment_id"`
+	MentionedAt time.Time `json:"mentioned_at"`
+	PriceID     int64     `json:"price_id"`
 }
 
 func (q *Queries) CreateTickerMention(ctx context.Context, arg CreateTickerMentionParams) (TickerMention, error) {
@@ -37,7 +36,7 @@ func (q *Queries) CreateTickerMention(ctx context.Context, arg CreateTickerMenti
 		arg.UserID,
 		arg.CommentID,
 		arg.MentionedAt,
-		arg.PriceAtMention,
+		arg.PriceID,
 	)
 	var i TickerMention
 	err := row.Scan(
@@ -45,8 +44,58 @@ func (q *Queries) CreateTickerMention(ctx context.Context, arg CreateTickerMenti
 		&i.TickerID,
 		&i.UserID,
 		&i.CommentID,
+		&i.PriceID,
 		&i.MentionedAt,
-		&i.PriceAtMention,
 	)
 	return i, err
+}
+
+const getLastTwoMentionsByUsername = `-- name: GetLastTwoMentionsByUsername :many
+SELECT
+  t.symbol,
+  t.id as ticker_id,
+  tp.price as mention_price,
+  tm.mentioned_at
+FROM ticker_mentions tm
+JOIN users u ON tm.user_id = u.id
+JOIN tickers t ON tm.ticker_id = t.id
+JOIN ticker_prices tp ON tm.price_id = tp.id
+WHERE u.username = $1
+ORDER BY tm.mentioned_at DESC
+LIMIT 2
+`
+
+type GetLastTwoMentionsByUsernameRow struct {
+	Symbol       string    `json:"symbol"`
+	TickerID     int64     `json:"ticker_id"`
+	MentionPrice string    `json:"mention_price"`
+	MentionedAt  time.Time `json:"mentioned_at"`
+}
+
+func (q *Queries) GetLastTwoMentionsByUsername(ctx context.Context, username string) ([]GetLastTwoMentionsByUsernameRow, error) {
+	rows, err := q.db.QueryContext(ctx, getLastTwoMentionsByUsername, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetLastTwoMentionsByUsernameRow
+	for rows.Next() {
+		var i GetLastTwoMentionsByUsernameRow
+		if err := rows.Scan(
+			&i.Symbol,
+			&i.TickerID,
+			&i.MentionPrice,
+			&i.MentionedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

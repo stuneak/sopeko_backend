@@ -1,6 +1,7 @@
 include .env
 export
 
+# ==================== Development ====================
 migrateup:
 	migrate -path db/sqlc/migration -database "$(DB_SOURCE)" -verbose up
 
@@ -20,15 +21,10 @@ test:
 	go test -v -cover ./...
 
 uplocal:
-	docker-compose -f ./docker-compose.local.yml up -d 
+	docker-compose -f ./docker-compose.yml up -d --build
 
 downlocal:
-	docker-compose -f ./docker-compose.local.yml down 
-	
-upprod:
-	docker-compose up -d 
+	docker-compose -f ./docker-compose.yml down
 
-downprod:
-	docker-compose down
 
-.PHONY: migrateup migratedown new_migration sqlc server test local prod
+.PHONY: migrateup migratedown new_migration sqlc server test uplocal downlocal

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"log"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -16,9 +15,6 @@ type Config struct {
 
 func LoadConfig() (config Config, err error) {
 	err = godotenv.Load()
-	if err != nil {
-		log.Println("Warning: Error loading .env file, using environment variables")
-	}
 
 	config = Config{
 		GINMode:       getEnv("GIN_MODE", "debug"),

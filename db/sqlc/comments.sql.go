@@ -7,22 +7,22 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"time"
 )
 
 const createComment = `-- name: CreateComment :one
 INSERT INTO comments (user_id, source, external_id, content, created_at)
 VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, external_id) DO UPDATE SET external_id = EXCLUDED.external_id
 RETURNING id, user_id, source, external_id, content, created_at
 `
 
 type CreateCommentParams struct {
-	UserID     int64          `json:"user_id"`
-	Source     string         `json:"source"`
-	ExternalID sql.NullString `json:"external_id"`
-	Content    sql.NullString `json:"content"`
-	CreatedAt  time.Time      `json:"created_at"`
+	UserID     int64     `json:"user_id"`
+	Source     string    `json:"source"`
+	ExternalID string    `json:"external_id"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 func (q *Queries) CreateComment(ctx context.Context, arg CreateCommentParams) (Comment, error) {
@@ -33,6 +33,30 @@ func (q *Queries) CreateComment(ctx context.Context, arg CreateCommentParams) (C
 		arg.Content,
 		arg.CreatedAt,
 	)
+	var i Comment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Source,
+		&i.ExternalID,
+		&i.Content,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCommentByUserAndExternalID = `-- name: GetCommentByUserAndExternalID :one
+SELECT id, user_id, source, external_id, content, created_at FROM comments
+WHERE user_id = $1 AND external_id = $2
+`
+
+type GetCommentByUserAndExternalIDParams struct {
+	UserID     int64  `json:"user_id"`
+	ExternalID string `json:"external_id"`
+}
+
+func (q *Queries) GetCommentByUserAndExternalID(ctx context.Context, arg GetCommentByUserAndExternalIDParams) (Comment, error) {
+	row := q.db.QueryRowContext(ctx, getCommentByUserAndExternalID, arg.UserID, arg.ExternalID)
 	var i Comment
 	err := row.Scan(
 		&i.ID,

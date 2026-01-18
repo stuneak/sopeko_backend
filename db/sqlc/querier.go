@@ -13,10 +13,16 @@ type Querier interface {
 	CreateTicker(ctx context.Context, arg CreateTickerParams) (Ticker, error)
 	CreateTickerMention(ctx context.Context, arg CreateTickerMentionParams) (TickerMention, error)
 	CreateUser(ctx context.Context, username string) (User, error)
+	GetCommentByUserAndExternalID(ctx context.Context, arg GetCommentByUserAndExternalIDParams) (Comment, error)
+	GetLastTwoMentionsByUsername(ctx context.Context, username string) ([]GetLastTwoMentionsByUsernameRow, error)
 	GetLatestTickerPrice(ctx context.Context, tickerID int64) (GetLatestTickerPriceRow, error)
 	GetTickerBySymbol(ctx context.Context, symbol string) (Ticker, error)
+	GetTickerPriceByDate(ctx context.Context, arg GetTickerPriceByDateParams) (GetTickerPriceByDateRow, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
-	InsertTickerPrice(ctx context.Context, arg InsertTickerPriceParams) error
+	InsertTickerPrice(ctx context.Context, arg InsertTickerPriceParams) (TickerPrice, error)
+	ListAllTickers(ctx context.Context) ([]Ticker, error)
+	TickerPriceExistsForDate(ctx context.Context, arg TickerPriceExistsForDateParams) (bool, error)
+	UpsertTicker(ctx context.Context, arg UpsertTickerParams) error
 }
 
 var _ Querier = (*Queries)(nil)

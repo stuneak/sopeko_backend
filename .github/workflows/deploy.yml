@@ -1,0 +1,149 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+      image_tag: ${{ steps.vars.outputs.sha_short }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set variables
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          no-cache: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Output image info
+        run: |
+          echo "### Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "- **Digest:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** \`${{ steps.vars.outputs.sha_short }}\`" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          source: "docker-compose.prod.yml,nginx/,scripts/"
+          target: "~/bagger"
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        timeout-minutes: 5
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          GITHUB_REPO: ${{ github.repository }}
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          envs: POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,GITHUB_REPO,IMAGE_DIGEST
+          script: |
+            set -e
+
+            # First-time setup: install Docker if not present
+            if ! command -v docker &> /dev/null; then
+              echo "Installing Docker..."
+              sudo apt-get update
+              sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release openssl
+              curl -fsSL https://get.docker.com | sudo sh
+              sudo usermod -aG docker $USER
+              sudo systemctl enable docker
+              sudo systemctl start docker
+              # Re-login to apply docker group (for this session, use sudo)
+              echo "Docker installed. Using sudo for this session."
+            fi
+
+            # Install UFW if not present
+            if ! command -v ufw &> /dev/null; then
+              echo "Installing UFW..."
+              sudo apt-get update
+              sudo apt-get install -y ufw
+              sudo ufw allow OpenSSH
+              sudo ufw allow 80/tcp
+              sudo ufw allow 443/tcp
+              sudo ufw --force enable
+            fi
+
+            cd ~/bagger
+
+            # Make scripts executable
+            chmod +x scripts/*.sh
+
+            # Create .env file
+            GITHUB_REPO_LOWER=$(echo "${GITHUB_REPO}" | tr '[:upper:]' '[:lower:]')
+            printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nGITHUB_REPOSITORY=%s\n' \
+              "${POSTGRES_USER}" "${POSTGRES_PASSWORD}" "${POSTGRES_DB}" "${GITHUB_REPO_LOWER}" > .env
+
+            # Log the deployed image
+            echo "Deploying image digest: ${IMAGE_DIGEST}"
+            echo "${IMAGE_DIGEST}" > .last_deployed_digest
+
+            # Pull the app image
+            docker pull ghcr.io/${GITHUB_REPO_LOWER}:latest
+
+            # Stop and restart only the app container (leave db running if healthy)
+            docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app
+
+            # Ensure other services are running
+            docker compose -f docker-compose.prod.yml up -d
+
+            # Clean up old images
+            docker image prune -f
+
+            echo "Deployment complete. Image digest: ${IMAGE_DIGEST}"

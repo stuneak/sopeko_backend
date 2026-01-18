@@ -7,7 +7,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 )
 
 const createTicker = `-- name: CreateTicker :one
@@ -17,9 +16,9 @@ RETURNING id, symbol, company_name, exchange, currency, created_at
 `
 
 type CreateTickerParams struct {
-	Symbol      string         `json:"symbol"`
-	CompanyName sql.NullString `json:"company_name"`
-	Exchange    sql.NullString `json:"exchange"`
+	Symbol      string `json:"symbol"`
+	CompanyName string `json:"company_name"`
+	Exchange    string `json:"exchange"`
 }
 
 func (q *Queries) CreateTicker(ctx context.Context, arg CreateTickerParams) (Ticker, error) {
@@ -54,4 +53,55 @@ func (q *Queries) GetTickerBySymbol(ctx context.Context, symbol string) (Ticker,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listAllTickers = `-- name: ListAllTickers :many
+SELECT id, symbol, company_name, exchange, currency, created_at FROM tickers ORDER BY symbol
+`
+
+func (q *Queries) ListAllTickers(ctx context.Context) ([]Ticker, error) {
+	rows, err := q.db.QueryContext(ctx, listAllTickers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Ticker
+	for rows.Next() {
+		var i Ticker
+		if err := rows.Scan(
+			&i.ID,
+			&i.Symbol,
+			&i.CompanyName,
+			&i.Exchange,
+			&i.Currency,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertTicker = `-- name: UpsertTicker :exec
+INSERT INTO tickers (symbol, company_name, exchange)
+VALUES ($1, $2, $3)
+ON CONFLICT (symbol) DO NOTHING
+`
+
+type UpsertTickerParams struct {
+	Symbol      string `json:"symbol"`
+	CompanyName string `json:"company_name"`
+	Exchange    string `json:"exchange"`
+}
+
+func (q *Queries) UpsertTicker(ctx context.Context, arg UpsertTickerParams) error {
+	_, err := q.db.ExecContext(ctx, upsertTicker, arg.Symbol, arg.CompanyName, arg.Exchange)
+	return err
 }
