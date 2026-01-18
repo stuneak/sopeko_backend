@@ -65,7 +65,6 @@ services:
       app:
         condition: service_started
     restart: unless-stopped
-
   # Certbot renewal service - checks for renewal every 12 hours and reloads nginx
   certbot:
     image: certbot/certbot:latest
