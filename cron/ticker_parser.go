@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/stuneak/bagger/db/sqlc"
+	db "github.com/stuneak/sopeko/db/sqlc"
 )
 
 var plog = log.New(log.Writer(), "[PARSER] ", log.Flags())

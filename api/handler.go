@@ -20,7 +20,7 @@ type MentionResponse struct {
 func (server *Server) getUserMentions(ctx *gin.Context) {
 	username := ctx.Param("username")
 
-	mentions, err := server.store.GetLastTwoMentionsByUsername(ctx, username)
+	mentions, err := server.store.GetFirstMentionPerTickerByUsername(ctx, username)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -31,49 +31,36 @@ func (server *Server) getUserMentions(ctx *gin.Context) {
 		return
 	}
 
-	// Check if the last mention was today
+	// Exclude today's mentions
 	now := time.Now()
-	lastMention := mentions[0]
-	if lastMention.MentionedAt.Year() == now.Year() &&
-		lastMention.MentionedAt.YearDay() == now.YearDay() {
-		ctx.JSON(http.StatusOK, []MentionResponse{})
-		return
-	}
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
-	// Fetch current price from ticker_prices table
-	latestPrice, err := server.store.GetLatestTickerPrice(ctx, lastMention.TickerID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch current price: " + err.Error()})
-		return
-	}
-	currentPrice := latestPrice.Price
+	var results []MentionResponse
 
-	var response []MentionResponse
+	for _, mention := range mentions {
+		if mention.MentionedAt.After(todayStart) || mention.MentionedAt.Equal(todayStart) {
+			continue
+		}
 
-	// If we have 2 mentions, include the previous one first
-	if len(mentions) >= 2 {
-		prevMention := mentions[1]
-		prevPercentChange := calculatePercentChange(prevMention.MentionPrice, currentPrice)
-		response = append(response, MentionResponse{
-			Symbol:        prevMention.Symbol,
-			MentionPrice:  prevMention.MentionPrice,
+		// Fetch current price for each ticker
+		latestPrice, err := server.store.GetLatestTickerPrice(ctx, mention.TickerID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch current price: " + err.Error()})
+			return
+		}
+		currentPrice := latestPrice.Price
+
+		percentChange := calculatePercentChange(mention.MentionPrice, currentPrice)
+		results = append(results, MentionResponse{
+			Symbol:        mention.Symbol,
+			MentionPrice:  mention.MentionPrice,
 			CurrentPrice:  currentPrice,
-			PercentChange: prevPercentChange,
-			MentionedAt:   prevMention.MentionedAt,
+			PercentChange: percentChange,
+			MentionedAt:   mention.MentionedAt,
 		})
 	}
 
-	// Last mention (first in the list)
-	lastPercentChange := calculatePercentChange(lastMention.MentionPrice, currentPrice)
-	response = append(response, MentionResponse{
-		Symbol:        lastMention.Symbol,
-		MentionPrice:  lastMention.MentionPrice,
-		CurrentPrice:  currentPrice,
-		PercentChange: lastPercentChange,
-		MentionedAt:   lastMention.MentionedAt,
-	})
-
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, results)
 }
 
 func calculatePercentChange(oldPrice, newPrice string) string {

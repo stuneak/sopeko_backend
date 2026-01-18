@@ -1,7 +1,9 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: bagger-postgres
+    container_name: sopeko-postgres
+    ports:                                                                      
+      - "127.0.0.1:5432:5432" 
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -9,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - bagger-network
+      - sopeko-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -19,14 +21,14 @@ services:
 
   app:
     image: ghcr.io/${GITHUB_REPOSITORY}:latest
-    container_name: bagger-app
+    container_name: sopeko-app
     environment:
       DB_DRIVER: postgres
       DB_SOURCE: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       SERVER_ADDRESS: 0.0.0.0:8080
       GIN_MODE: release
     networks:
-      - bagger-network
+      - sopeko-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,7 +37,7 @@ services:
   # SSL certificate initialization - runs once on first deploy
   ssl-init:
     image: certbot/certbot:latest
-    container_name: bagger-ssl-init
+    container_name: sopeko-ssl-init
     ports:
       - "80:80"
     volumes:
@@ -45,11 +47,11 @@ services:
     entrypoint: /bin/sh
     command: /ssl-init.sh
     networks:
-      - bagger-network
+      - sopeko-network
 
   nginx:
     image: nginx:alpine
-    container_name: bagger-nginx
+    container_name: sopeko-nginx
     ports:
       - "80:80"
       - "443:443"
@@ -58,7 +60,7 @@ services:
       - certbot_conf:/etc/letsencrypt:ro
       - certbot_www:/var/www/certbot:ro
     networks:
-      - bagger-network
+      - sopeko-network
     depends_on:
       ssl-init:
         condition: service_completed_successfully
@@ -68,21 +70,21 @@ services:
   # Certbot renewal service - checks for renewal every 12 hours and reloads nginx
   certbot:
     image: certbot/certbot:latest
-    container_name: bagger-certbot
+    container_name: sopeko-certbot
     volumes:
       - certbot_conf:/etc/letsencrypt
       - certbot_www:/var/www/certbot
       - /var/run/docker.sock:/var/run/docker.sock
-    entrypoint: /bin/sh -c "apk add --no-cache curl > /dev/null 2>&1; trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet --deploy-hook 'curl -s --unix-socket /var/run/docker.sock -X POST http://localhost/containers/bagger-nginx/kill?signal=HUP'; sleep 12h & wait $${!}; done"
+    entrypoint: /bin/sh -c "apk add --no-cache curl > /dev/null 2>&1; trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet --deploy-hook 'curl -s --unix-socket /var/run/docker.sock -X POST http://localhost/containers/sopeko-nginx/kill?signal=HUP'; sleep 12h & wait $${!}; done"
     networks:
-      - bagger-network
+      - sopeko-network
     depends_on:
       nginx:
         condition: service_started
     restart: unless-stopped
 
 networks:
-  bagger-network:
+  sopeko-network:
     driver: bridge
 
 volumes:

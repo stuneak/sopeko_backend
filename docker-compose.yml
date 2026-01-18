@@ -1,12 +1,12 @@
 
 networks:
-  bagger-network:
+  sopeko-network:
     driver: bridge
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: bagger-postgres
+    container_name: sopeko-postgres
     env_file:
       - .env
     ports:
@@ -14,7 +14,7 @@ services:
     volumes:
       - postgres_data:/root/postgresql/data
     networks:
-      - bagger-network
+      - sopeko-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -25,7 +25,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: bagger-app
+    container_name: sopeko-app
     environment:
       DB_DRIVER: ${DB_DRIVER:-postgres}
       DB_SOURCE: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
@@ -37,7 +37,7 @@ services:
       - .:/app
       - go_mod_cache:/go/pkg/mod
     networks:
-      - bagger-network
+      - sopeko-network
     depends_on:
       postgres:
         condition: service_healthy

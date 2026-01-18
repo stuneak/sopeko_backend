@@ -3,10 +3,10 @@ package main
 import (
 	"log"
 
-	"github.com/stuneak/bagger/api"
-	"github.com/stuneak/bagger/config"
-	"github.com/stuneak/bagger/cron"
-	db "github.com/stuneak/bagger/db/sqlc"
+	"github.com/stuneak/sopeko/api"
+	"github.com/stuneak/sopeko/config"
+	"github.com/stuneak/sopeko/cron"
+	db "github.com/stuneak/sopeko/db/sqlc"
 )
 
 func main() {

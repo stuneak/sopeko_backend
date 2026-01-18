@@ -1,8 +1,9 @@
 package api
 
 import (
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	db "github.com/stuneak/bagger/db/sqlc"
+	db "github.com/stuneak/sopeko/db/sqlc"
 )
 
 type Server struct {
@@ -15,6 +16,14 @@ func NewServer(store *db.Queries, ginMode string) *Server {
 	router := gin.Default()
 
 	gin.SetMode(ginMode)
+
+	// CORS middleware - allow requests from browser extensions
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type"},
+		AllowCredentials: false,
+	}))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {

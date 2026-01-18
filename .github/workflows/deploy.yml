@@ -76,7 +76,7 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT }}
           source: "docker-compose.prod.yml,nginx/,scripts/"
-          target: "~/bagger"
+          target: "~/sopeko"
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -120,7 +120,7 @@ jobs:
               sudo ufw --force enable
             fi
 
-            cd ~/bagger
+            cd ~/sopeko
 
             # Make scripts executable
             chmod +x scripts/*.sh
@@ -136,6 +136,9 @@ jobs:
 
             # Pull the app image
             docker pull ghcr.io/${GITHUB_REPO_LOWER}:latest
+
+            # Docker Stop
+            docker compose -f docker-compose.prod.yml down 
 
             # Stop and restart only the app container (leave db running if healthy)
             docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app

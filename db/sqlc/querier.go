@@ -14,7 +14,7 @@ type Querier interface {
 	CreateTickerMention(ctx context.Context, arg CreateTickerMentionParams) (TickerMention, error)
 	CreateUser(ctx context.Context, username string) (User, error)
 	GetCommentByUserAndExternalID(ctx context.Context, arg GetCommentByUserAndExternalIDParams) (Comment, error)
-	GetLastTwoMentionsByUsername(ctx context.Context, username string) ([]GetLastTwoMentionsByUsernameRow, error)
+	GetFirstMentionPerTickerByUsername(ctx context.Context, username string) ([]GetFirstMentionPerTickerByUsernameRow, error)
 	GetLatestTickerPrice(ctx context.Context, tickerID int64) (GetLatestTickerPriceRow, error)
 	GetTickerBySymbol(ctx context.Context, symbol string) (Ticker, error)
 	GetTickerPriceByDate(ctx context.Context, arg GetTickerPriceByDateParams) (GetTickerPriceByDateRow, error)

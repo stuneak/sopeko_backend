@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
-	db "github.com/stuneak/bagger/db/sqlc"
+	db "github.com/stuneak/sopeko/db/sqlc"
 )
 
 var slog = log.New(log.Writer(), "[CRON] ", log.Flags())

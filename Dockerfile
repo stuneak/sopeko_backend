@@ -41,6 +41,5 @@ RUN chmod +x entrypoint.sh
 
 # Expose port
 EXPOSE 8080
-
 # Run migrations and start the application
 ENTRYPOINT ["./entrypoint.sh"]
