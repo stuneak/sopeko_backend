@@ -1,6 +1,6 @@
 # Sopeko Backend
 
-Stock mention aggregator that scrapes Reddit (r/pennystocks, r/investing, r/stocks, r/wallstreetbets) for ticker mentions, tracks prices via Yahoo Finance, and provides an API to see how mentioned stocks performed over time.
+Stock mention aggregator that scrapes Reddit (r/pennystocks, r/investing, r/stocks) for ticker mentions, tracks prices via Yahoo Finance, and provides an API to see how mentioned stocks performed over time.
 
 ![Screenshot](screenshot.png)
 

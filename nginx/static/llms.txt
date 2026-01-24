@@ -6,7 +6,7 @@ Sopeko is a service that tracks stock ticker mentions on Reddit and shows how th
 
 ## What Sopeko Does
 
-- Scrapes stock ticker mentions from Reddit communities (r/wallstreetbets, r/stocks, r/investing, r/pennystocks)
+- Scrapes stock ticker mentions from Reddit communities (r/stocks, r/investing, r/pennystocks)
 - Records the stock price at the time of mention
 - Tracks price changes over time to calculate actual returns
 - Provides a Chrome extension that displays performance badges next to Reddit usernames
@@ -22,6 +22,7 @@ The service provides a simple REST API:
 ## Links
 
 - Website: https://sopeko.com
+- Leaderboards: https://sopeko.com/leaderboards.html
 - Chrome Extension: https://github.com/stuneak/sopeko_extension/
 - Privacy Policy: https://sopeko.com/extension_privacy.html
 

@@ -2,13 +2,19 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://sopeko.com/</loc>
-    <lastmod>2025-01-20</lastmod>
-    <changefreq>weekly</changefreq>
+    <lastmod>2025-01-24</lastmod>
+    <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>
+    <url>
+    <loc>https://sopeko.com/leaderboards.html</loc>
+    <lastmod>2025-01-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://sopeko.com/extension_privacy.html</loc>
-    <lastmod>2025-01-20</lastmod>
+    <lastmod>2025-01-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

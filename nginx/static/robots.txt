@@ -3,6 +3,7 @@
 
 User-agent: *
 Allow: /
+Allow: /leaderboards.html
 Allow: /extension_privacy.html
 
 # API endpoints - allow for documentation purposes

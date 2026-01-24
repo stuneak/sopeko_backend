@@ -26,6 +26,13 @@ type yahooChartResponse struct {
 				RegularMarketVolume int64   `json:"regularMarketVolume"`
 				RegularMarketTime   int64   `json:"regularMarketTime"`
 			} `json:"meta"`
+			Timestamp  []int64 `json:"timestamp"`
+			Indicators struct {
+				Quote []struct {
+					Close  []*float64 `json:"close"`
+					Volume []*int64   `json:"volume"`
+				} `json:"quote"`
+			} `json:"indicators"`
 			Events *struct {
 				Splits map[string]yahooSplitEvent `json:"splits"`
 			} `json:"events"`
@@ -49,10 +56,10 @@ func NewYahooFetcher() *YahooFetcher {
 	}
 }
 
-// FetchCurrentPriceAndVolume fetches the current price, volume, and market time for a symbol.
+// FetchCurrentPriceAndVolume fetches the previous day's closing price, volume, and timestamp for a symbol.
 func (y *YahooFetcher) FetchCurrentPriceAndVolume(ctx context.Context, symbol string) (price float64, volume int64, recordedAt time.Time, err error) {
 	url := fmt.Sprintf(
-		"https://query1.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=1d",
+		"https://query1.finance.yahoo.com/v8/finance/chart/%s?range=5d&interval=1d",
 		symbol,
 	)
 
@@ -90,12 +97,29 @@ func (y *YahooFetcher) FetchCurrentPriceAndVolume(ctx context.Context, symbol st
 		return 0, 0, time.Time{}, fmt.Errorf("no chart data for %s", symbol)
 	}
 
-	meta := chartResp.Chart.Result[0].Meta
-	if meta.RegularMarketPrice == 0 {
-		return 0, 0, time.Time{}, fmt.Errorf("no market price for %s", symbol)
+	result := chartResp.Chart.Result[0]
+	if len(result.Indicators.Quote) == 0 || len(result.Timestamp) < 2 {
+		return 0, 0, time.Time{}, fmt.Errorf("insufficient chart data for %s", symbol)
 	}
 
-	return meta.RegularMarketPrice, meta.RegularMarketVolume, time.Unix(meta.RegularMarketTime, 0), nil
+	quotes := result.Indicators.Quote[0]
+	// Get the second-to-last entry (previous day's close)
+	idx := len(result.Timestamp) - 2
+	if idx < 0 || idx >= len(quotes.Close) {
+		return 0, 0, time.Time{}, fmt.Errorf("insufficient price data for %s", symbol)
+	}
+
+	if quotes.Close[idx] == nil {
+		return 0, 0, time.Time{}, fmt.Errorf("no closing price for previous day for %s", symbol)
+	}
+
+	closePrice := *quotes.Close[idx]
+	var vol int64
+	if idx < len(quotes.Volume) && quotes.Volume[idx] != nil {
+		vol = *quotes.Volume[idx]
+	}
+
+	return closePrice, vol, time.Unix(result.Timestamp[idx], 0), nil
 }
 
 // FetchSplits fetches all stock split events for a symbol.
