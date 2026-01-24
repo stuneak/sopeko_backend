@@ -91,13 +91,17 @@ func (s *Scheduler) fetchSubreddit(subreddit string) {
 }
 
 func (s *Scheduler) processRedditContent(ctx context.Context, author, externalID, content string, createdAt time.Time, source string) {
+	clog("processing author=%s externalID=%s source=%s", author, externalID, source)
+
 	// Upsert user
 	user, err := s.store.GetUserByUsername(ctx, author)
 	if err != nil {
 		user, err = s.store.CreateUser(ctx, author)
 		if err != nil {
+			clog("error creating user %s: %v", author, err)
 			return
 		}
+		clog("created new user %s", author)
 	}
 
 	// Check if comment already exists
@@ -106,7 +110,8 @@ func (s *Scheduler) processRedditContent(ctx context.Context, author, externalID
 		ExternalID: externalID,
 	})
 	if err == nil {
-		return // already processed
+		clog("comment already exists externalID=%s, skipping", externalID)
+		return
 	}
 
 	// Create comment
@@ -118,15 +123,19 @@ func (s *Scheduler) processRedditContent(ctx context.Context, author, externalID
 		CreatedAt:  createdAt,
 	})
 	if err != nil {
+		clog("error creating comment externalID=%s: %v", externalID, err)
 		return
 	}
 
 	// Extract tickers and create mentions
 	tickers := external_api.ExtractTickers(content)
+	clog("extracted %d tickers from externalID=%s", len(tickers), externalID)
+
 	for _, symbol := range tickers {
 		ticker, err := s.store.GetTickerBySymbol(ctx, symbol)
 		if err != nil {
-			continue // ticker not in our database
+			clog("ticker %s not in database, skipping", symbol)
+			continue
 		}
 
 		// Ensure a ticker price exists before createdAt
@@ -136,6 +145,7 @@ func (s *Scheduler) processRedditContent(ctx context.Context, author, externalID
 		})
 		if err != nil {
 			// No price found, fetch from Yahoo and store
+			clog("no price for %s before %s, fetching from Yahoo", symbol, createdAt.Format("2006-01-02"))
 			price, volume, recordedAt, fetchErr := s.yahooFetcher.FetchHistoricalPrice(ctx, symbol, createdAt)
 			if fetchErr == nil {
 				s.store.InsertTickerPrice(ctx, db.InsertTickerPriceParams{
@@ -144,6 +154,9 @@ func (s *Scheduler) processRedditContent(ctx context.Context, author, externalID
 					Volume:     volume,
 					RecordedAt: recordedAt,
 				})
+				clog("stored historical price for %s: %.2f", symbol, price)
+			} else {
+				clog("failed to fetch historical price for %s: %v", symbol, fetchErr)
 			}
 		}
 
@@ -153,6 +166,7 @@ func (s *Scheduler) processRedditContent(ctx context.Context, author, externalID
 			CommentID:   comment.ID,
 			MentionedAt: createdAt,
 		})
+		clog("created mention for %s by %s", symbol, author)
 	}
 }
 
@@ -314,8 +328,8 @@ func (s *Scheduler) RegisterJobs() error {
 		return err
 	}
 
-	// 2. Ticker prices - +5 min after startup, every 6h
-	pricesStart := now.Add(5 * time.Minute)
+	// 2. Ticker prices - +5 hours after startup, every 6h
+	pricesStart := now.Add(5 * time.Hour)
 	_, err = s.scheduler.NewJob(
 		gocron.DurationJob(6*time.Hour),
 		gocron.NewTask(s.fetchTickerPrices),

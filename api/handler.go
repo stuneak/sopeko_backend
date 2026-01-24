@@ -274,12 +274,20 @@ func (server *Server) getTopPerformingUsers(ctx *gin.Context) {
 		results = append(results, *u)
 	}
 
+	filtered := make([]TopUserResponse, 0, len(results))
+	for _, r := range results {
+		if r.TotalPercentGain >= 0 {
+			filtered = append(filtered, r)
+		}
+	}
+	results = filtered
+
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].TotalPercentGain > results[j].TotalPercentGain
 	})
 
-	if len(results) > 50 {
-		results = results[:50]
+	if len(results) > 10 {
+		results = results[:10]
 	}
 
 	ctx.JSON(http.StatusOK, results)

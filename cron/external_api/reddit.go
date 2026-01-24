@@ -5,11 +5,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
+
+var redditLogger = log.New(log.Writer(), "[REDDIT] ", log.Flags())
+
+func rlog(format string, args ...interface{}) {
+	pc, _, _, _ := runtime.Caller(1)
+	fn := runtime.FuncForPC(pc).Name()
+	if i := strings.LastIndex(fn, "."); i >= 0 {
+		fn = fn[i+1:]
+	}
+	redditLogger.Printf(fn+": "+format, args...)
+}
 
 const (
 	redditBaseURL = "https://www.reddit.com"
@@ -253,19 +266,23 @@ func (r *RedditScraper) FetchSubredditPosts(ctx context.Context, subreddit strin
 }
 
 func (r *RedditScraper) FetchPostComments(ctx context.Context, subreddit, postID string) ([]RedditComment, error) {
+	rlog("fetching comments subreddit=%s postID=%s", subreddit, postID)
+
 	seen := make(map[string]bool)
 	var comments []RedditComment
 
-	for _, sort := range []string{"confidence", "new", "top"} {
+	for _, sort := range []string{"new"} {
 		url := fmt.Sprintf("%s/r/%s/comments/%s.json?limit=500&depth=100&sort=%s",
 			redditBaseURL, subreddit, postID, sort)
 
 		body, err := r.makeRequest(ctx, url)
 		if err != nil {
+			rlog("request failed for postID=%s sort=%s: %v", postID, sort, err)
 			continue
 		}
 
 		newComments, moreIDs := r.parseCommentsResponse(body, postID)
+		rlog("parsed %d comments, %d moreIDs for postID=%s sort=%s", len(newComments), len(moreIDs), postID, sort)
 
 		for _, c := range newComments {
 			if !seen[c.ID] {
@@ -276,12 +293,14 @@ func (r *RedditScraper) FetchPostComments(ctx context.Context, subreddit, postID
 
 		if len(moreIDs) > 0 {
 			more, _ := r.fetchMoreChildren(ctx, postID, moreIDs, seen)
+			rlog("fetched %d more children for postID=%s", len(more), postID)
 			comments = append(comments, more...)
 		}
 
 		time.Sleep(1 * time.Second)
 	}
 
+	rlog("done postID=%s total_comments=%d", postID, len(comments))
 	return comments, nil
 }
 
